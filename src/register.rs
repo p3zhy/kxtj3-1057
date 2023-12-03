@@ -53,7 +53,21 @@ impl Register {
 
     /// Is the register read-only?
     pub fn read_only(self) -> bool {
-        matches!(self, Register::WHOAMI)
+        matches!(
+            self,
+            Register::WHOAMI
+                | Register::XOUT_L
+                | Register::XOUT_H
+                | Register::YOUT_H
+                | Register::YOUT_L
+                | Register::ZOUT_H
+                | Register::ZOUT_L
+                | Register::DCST_RESP
+                | Register::INT_REL
+                | Register::STATUS_REG
+                | Register::INT_SOURCE1
+                | Register::INT_SOURCE2
+        )
     }
 }
 
