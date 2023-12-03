@@ -21,6 +21,28 @@ impl SlaveAddr {
 #[repr(u8)]
 pub enum Register {
     WHOAMI = 0x0F,
+    DCST_RESP = 0x0C,
+    SOFT_REST = 0x7F,
+    XOUT_L = 0x06,
+    XOUT_H = 0x07,
+    YOUT_L = 0x08,
+    YOUT_H = 0x09,
+    ZOUT_L = 0x0A,
+    ZOUT_H = 0x0B,
+    STATUS_REG = 0x18,
+    INT_SOURCE1 = 0x16,
+    INT_SOURCE2 = 0x17,
+    INT_REL = 0x1A,
+    CTRL_REG1 = 0x1B,
+    CTRL_REG2 = 0x1D,
+    INT_CTRL_REG1 = 0x1E,
+    INT_CTRL_REG2 = 0x1F,
+    DATA_CTRL_REG = 0x21,
+    WAKEUP_COUNTER = 0x29,
+    NA_COUNTER = 0x2A,
+    SELF_TEST = 0x3A,
+    WAKEUP_THRESHOLD_H = 0x6A,
+    WAKEUP_THRESHOLD_L = 0x6B,
 }
 
 impl Register {
