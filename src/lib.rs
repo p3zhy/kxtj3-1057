@@ -61,7 +61,6 @@ where
     fn get_device_id(&mut self) -> Result<u8, Error<E, core::convert::Infallible>> {
         self.read_register(Register::WHOAMI)
     }
-    #[allow(dead_code)]
     /// Write a byte to the given register.
     fn write_register(
         &mut self,
@@ -87,5 +86,47 @@ where
             .write_read(self.address, &[register.addr()], &mut data)
             .map_err(Error::Bus)
             .and(Ok(data[0]))
+    }
+
+    /// Modify a register's value. Read the current value of the register,
+    /// update the value with the provided function, and set the register to
+    /// the return value.
+    fn modify_register<F>(
+        &mut self,
+        register: Register,
+        f: F,
+    ) -> Result<(), Error<E, core::convert::Infallible>>
+    where
+        F: FnOnce(u8) -> u8,
+    {
+        let value = self.read_register(register)?;
+
+        self.write_register(register, f(value))
+    }
+
+    /// Clear the given bits in the given register. For example:
+    ///
+    ///     kxtj3.register_clear_bits(0b0110)
+    ///
+    /// This call clears (sets to 0) the bits at index 1 and 2. Other bits of the register are not touched.
+    pub fn register_clear_bits(
+        &mut self,
+        reg: Register,
+        bits: u8,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.modify_register(reg, |v| v & !bits)
+    }
+
+    /// Set the given bits in the given register. For example:
+    ///
+    ///     kxtj3.register_set_bits(0b0110)
+    ///
+    /// This call sets to 1 the bits at index 1 and 2. Other bits of the register are not touched.
+    pub fn register_set_bits(
+        &mut self,
+        reg: Register,
+        bits: u8,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.modify_register(reg, |v| v | bits)
     }
 }
