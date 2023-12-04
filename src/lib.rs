@@ -13,7 +13,9 @@
 use embedded_hal::blocking::i2c::{self, WriteRead};
 
 mod register;
-pub use register::{Register, SlaveAddr, DEVICE_ID};
+
+use register::*;
+pub use register::{Mode, Register, SlaveAddr, DEVICE_ID};
 
 /// Accelerometer errors, generic around another error type `E` representing
 /// an (optional) cause of this error.
@@ -58,7 +60,7 @@ where
     }
 
     /// `WHO_AM_I` register.
-    fn get_device_id(&mut self) -> Result<u8, Error<E, core::convert::Infallible>> {
+    pub fn get_device_id(&mut self) -> Result<u8, Error<E, core::convert::Infallible>> {
         self.read_register(Register::WHOAMI)
     }
     /// Write a byte to the given register.
@@ -128,5 +130,27 @@ where
         bits: u8,
     ) -> Result<(), Error<E, core::convert::Infallible>> {
         self.modify_register(reg, |v| v | bits)
+    }
+
+    /// Controls the operating mode of the KXTJ3 .
+    /// `CTRL_REG1`: `PC1` bit , CTRL_REG1`: `RES` bit.
+    pub fn set_mode(&mut self, mode: Mode) -> Result<(), Error<E, core::convert::Infallible>> {
+        match mode {
+            Mode::LowPower => {
+                self.register_clear_bits(Register::CTRL1, PC1_EN)?;
+                self.register_clear_bits(Register::CTRL1, RES_EN)?;
+                self.register_set_bits(Register::CTRL1, PC1_EN)?;
+            }
+            Mode::Standby => {
+                self.register_clear_bits(Register::CTRL1, PC1_EN)?;
+            }
+            Mode::HighResolution => {
+                self.register_clear_bits(Register::CTRL1, PC1_EN)?;
+                self.register_set_bits(Register::CTRL1, RES_EN)?;
+                self.register_set_bits(Register::CTRL1, PC1_EN)?;
+            }
+        }
+
+        Ok(())
     }
 }

@@ -33,11 +33,11 @@ pub enum Register {
     INT_SOURCE1 = 0x16,
     INT_SOURCE2 = 0x17,
     INT_REL = 0x1A,
-    CTRL_REG1 = 0x1B,
-    CTRL_REG2 = 0x1D,
-    INT_CTRL_REG1 = 0x1E,
-    INT_CTRL_REG2 = 0x1F,
-    DATA_CTRL_REG = 0x21,
+    CTRL1 = 0x1B,
+    CTRL2 = 0x1D,
+    INT_CTRL1 = 0x1E,
+    INT_CTRL2 = 0x1F,
+    DATA_CTRL = 0x21,
     WAKEUP_COUNTER = 0x29,
     NA_COUNTER = 0x2A,
     SELF_TEST = 0x3A,
@@ -71,5 +71,23 @@ impl Register {
     }
 }
 
+// === WHO_AMI_I (0Fh) ===
 /// `WHO_AM_I` device identification register
 pub const DEVICE_ID: u8 = 0x35;
+
+// === CTRL_REG1 (20h) ===
+pub const PC1_EN: u8 = 0b1000_0000;
+pub const RES_EN: u8 = 0b0100_0000;
+/// Operating mode.
+#[derive(Copy, Clone, Debug, Eq, PartialEq)]
+#[repr(u8)]
+pub enum Mode {
+    /// High-resolution mode (12-bit or 14-bit data output) .
+    HighResolution,
+
+    /// Low-power mode (8-bit data output).
+    LowPower,
+
+    /// Stand-by mode
+    Standby,
+}
