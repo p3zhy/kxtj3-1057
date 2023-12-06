@@ -135,22 +135,47 @@ where
     /// Controls the operating mode of the KXTJ3 .
     /// `CTRL_REG1`: `PC1` bit , CTRL_REG1`: `RES` bit.
     pub fn set_mode(&mut self, mode: Mode) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
         match mode {
             Mode::LowPower => {
-                self.register_clear_bits(Register::CTRL1, PC1_EN)?;
                 self.register_clear_bits(Register::CTRL1, RES_EN)?;
                 self.register_set_bits(Register::CTRL1, PC1_EN)?;
             }
-            Mode::Standby => {
-                self.register_clear_bits(Register::CTRL1, PC1_EN)?;
-            }
+            Mode::Standby => {}
             Mode::HighResolution => {
-                self.register_clear_bits(Register::CTRL1, PC1_EN)?;
                 self.register_set_bits(Register::CTRL1, RES_EN)?;
                 self.register_set_bits(Register::CTRL1, PC1_EN)?;
             }
         }
 
         Ok(())
+    }
+
+    /// Data rate selection.
+    pub fn set_datarate(
+        &mut self,
+        datarate: DataRate,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
+        self.modify_register(Register::DATA_CTRL, |mut data_ctrl| {
+            // Mask off highest 4 bits
+            data_ctrl &= !ODR_MASK;
+            // Write in lowest 4 bits
+            data_ctrl |= datarate.bits();
+
+            data_ctrl
+        })?;
+        self.register_set_bits(Register::CTRL1, PC1_EN)
+    }
+    /// Range selection.
+    pub fn set_range(&mut self, range: Range) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
+        self.modify_register(Register::CTRL1, |mut ctrl1| {
+            ctrl1 &= !GSEL_MASK;
+            ctrl1 |= range.bits() << 2;
+
+            ctrl1
+        })?;
+        self.register_set_bits(Register::CTRL1, PC1_EN)
     }
 }
