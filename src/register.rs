@@ -116,7 +116,13 @@ impl DataRate {
 #[repr(u8)]
 pub enum Range {
     /// ±16g
-    G16 = 0b001,
+    G16_1 = 0b001,
+
+    /// ±16g
+    G16_2 = 0b011,
+
+    /// ±16g
+    G16_3 = 0b101,
 
     /// ±16g available only in 14-bit mode
     G16_14Bit = 0b111,

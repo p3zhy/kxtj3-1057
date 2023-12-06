@@ -25,6 +25,12 @@ pub enum Error<BusError, PinError> {
     Bus(BusError),
     Pin(PinError),
 
+    /// Invalid data rate selection
+    InvalidDataRate,
+
+    /// Invalid selects the acceleration range
+    InvalidRange,
+
     /// Attempted to write to a read-only register
     WriteToReadOnly,
 
@@ -59,10 +65,6 @@ where
         Ok(kxtj3)
     }
 
-    /// `WHO_AM_I` register.
-    pub fn get_device_id(&mut self) -> Result<u8, Error<E, core::convert::Infallible>> {
-        self.read_register(Register::WHOAMI)
-    }
     /// Write a byte to the given register.
     fn write_register(
         &mut self,
@@ -88,6 +90,72 @@ where
             .write_read(self.address, &[register.addr()], &mut data)
             .map_err(Error::Bus)
             .and(Ok(data[0]))
+    }
+
+    /// `WHO_AM_I` register.
+    pub fn get_device_id(&mut self) -> Result<u8, Error<E, core::convert::Infallible>> {
+        self.read_register(Register::WHOAMI)
+    }
+
+    /// Read the current operating mode.
+    pub fn get_mode(&mut self) -> Result<Mode, Error<E, core::convert::Infallible>> {
+        let ctrl1 = self.read_register(Register::CTRL1)?;
+
+        let is_pc1_set = (ctrl1 >> 7) & 0x01 != 0;
+        let is_res_set = (ctrl1 >> 6) & 0x01 != 0;
+
+        let mode = match (is_pc1_set, is_res_set) {
+            (false, _) => Mode::Standby,
+            (true, false) => Mode::LowPower,
+            (true, true) => Mode::HighResolution,
+        };
+
+        Ok(mode)
+    }
+
+    /// Data rate selection.
+    pub fn set_datarate(
+        &mut self,
+        datarate: DataRate,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
+        self.modify_register(Register::DATA_CTRL, |mut data_ctrl| {
+            // Mask off highest 4 bits
+            data_ctrl &= !ODR_MASK;
+            // Write in lowest 4 bits
+            data_ctrl |= datarate.bits();
+
+            data_ctrl
+        })?;
+        self.register_set_bits(Register::CTRL1, PC1_EN)
+    }
+
+    /// Read the current data selection rate.
+    pub fn get_datarate(&mut self) -> Result<DataRate, Error<E, core::convert::Infallible>> {
+        let data_ctrl = self.read_register(Register::DATA_CTRL)?;
+        let odr = data_ctrl & 0x0F;
+
+        DataRate::try_from(odr).map_err(|_| Error::InvalidDataRate)
+    }
+
+    /// Set the acceleration Range
+    pub fn set_range(&mut self, range: Range) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
+        self.modify_register(Register::CTRL1, |mut ctrl1| {
+            ctrl1 &= !GSEL_MASK;
+            ctrl1 |= range.bits() << 2;
+
+            ctrl1
+        })?;
+        self.register_set_bits(Register::CTRL1, PC1_EN)
+    }
+
+    /// Read the acceleration Range
+    pub fn get_range(&mut self) -> Result<Range, Error<E, core::convert::Infallible>> {
+        let ctrl1 = self.read_register(Register::CTRL1)?;
+        let gsel = (ctrl1 >> 2) & 0x07;
+
+        Range::try_from(gsel).map_err(|_| Error::InvalidRange)
     }
 
     /// Modify a register's value. Read the current value of the register,
@@ -149,33 +217,5 @@ where
         }
 
         Ok(())
-    }
-
-    /// Data rate selection.
-    pub fn set_datarate(
-        &mut self,
-        datarate: DataRate,
-    ) -> Result<(), Error<E, core::convert::Infallible>> {
-        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
-        self.modify_register(Register::DATA_CTRL, |mut data_ctrl| {
-            // Mask off highest 4 bits
-            data_ctrl &= !ODR_MASK;
-            // Write in lowest 4 bits
-            data_ctrl |= datarate.bits();
-
-            data_ctrl
-        })?;
-        self.register_set_bits(Register::CTRL1, PC1_EN)
-    }
-    /// Range selection.
-    pub fn set_range(&mut self, range: Range) -> Result<(), Error<E, core::convert::Infallible>> {
-        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
-        self.modify_register(Register::CTRL1, |mut ctrl1| {
-            ctrl1 &= !GSEL_MASK;
-            ctrl1 |= range.bits() << 2;
-
-            ctrl1
-        })?;
-        self.register_set_bits(Register::CTRL1, PC1_EN)
     }
 }
