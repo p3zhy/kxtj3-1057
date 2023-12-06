@@ -97,6 +97,25 @@ where
         self.read_register(Register::WHOAMI)
     }
 
+    /// Controls the operating mode of the KXTJ3 .
+    /// `CTRL_REG1`: `PC1` bit , CTRL_REG1`: `RES` bit.
+    pub fn set_mode(&mut self, mode: Mode) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
+        match mode {
+            Mode::LowPower => {
+                self.register_clear_bits(Register::CTRL1, RES_EN)?;
+                self.register_set_bits(Register::CTRL1, PC1_EN)?;
+            }
+            Mode::Standby => {}
+            Mode::HighResolution => {
+                self.register_set_bits(Register::CTRL1, RES_EN)?;
+                self.register_set_bits(Register::CTRL1, PC1_EN)?;
+            }
+        }
+
+        Ok(())
+    }
+
     /// Read the current operating mode.
     pub fn get_mode(&mut self) -> Result<Mode, Error<E, core::convert::Infallible>> {
         let ctrl1 = self.read_register(Register::CTRL1)?;
@@ -158,6 +177,16 @@ where
         Range::try_from(gsel).map_err(|_| Error::InvalidRange)
     }
 
+    /// Read from the registers for each of the 3 axes.
+    fn read_accel_bytes(&mut self) -> Result<[u8; 6], Error<E, core::convert::Infallible>> {
+        let mut data = [0u8; 6];
+
+        self.i2c
+            .write_read(self.address, &[Register::XOUT_L.addr() | 0x80], &mut data)
+            .map_err(Error::Bus)
+            .and(Ok(data))
+    }
+
     /// Modify a register's value. Read the current value of the register,
     /// update the value with the provided function, and set the register to
     /// the return value.
@@ -198,24 +227,5 @@ where
         bits: u8,
     ) -> Result<(), Error<E, core::convert::Infallible>> {
         self.modify_register(reg, |v| v | bits)
-    }
-
-    /// Controls the operating mode of the KXTJ3 .
-    /// `CTRL_REG1`: `PC1` bit , CTRL_REG1`: `RES` bit.
-    pub fn set_mode(&mut self, mode: Mode) -> Result<(), Error<E, core::convert::Infallible>> {
-        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
-        match mode {
-            Mode::LowPower => {
-                self.register_clear_bits(Register::CTRL1, RES_EN)?;
-                self.register_set_bits(Register::CTRL1, PC1_EN)?;
-            }
-            Mode::Standby => {}
-            Mode::HighResolution => {
-                self.register_set_bits(Register::CTRL1, RES_EN)?;
-                self.register_set_bits(Register::CTRL1, PC1_EN)?;
-            }
-        }
-
-        Ok(())
     }
 }
