@@ -10,6 +10,11 @@
 
 #![no_std]
 
+pub use accelerometer;
+use accelerometer::error::Error as AccelerometerError;
+use accelerometer::vector::I16x3;
+use accelerometer::RawAccelerometer;
+// use accelerometer::{Accelerometer, RawAccelerometer};
 use embedded_hal::blocking::i2c::{self, WriteRead};
 
 mod register;
@@ -227,5 +232,23 @@ where
         bits: u8,
     ) -> Result<(), Error<E, core::convert::Infallible>> {
         self.modify_register(reg, |v| v | bits)
+    }
+}
+
+
+impl<I2C, E> RawAccelerometer<I16x3> for Kxtj3<I2C>
+where
+    I2C: WriteRead<Error = E> + i2c::Write<Error = E>, E: core::fmt::Debug
+{
+    type Error = Error<E, core::convert::Infallible>;
+
+    fn accel_raw(&mut self) -> Result<I16x3, AccelerometerError<Self::Error>> {
+        let accel_bytes = self.read_accel_bytes()?;
+
+        let x = i16::from_le_bytes(accel_bytes[0..2].try_into().unwrap());
+        let y = i16::from_le_bytes(accel_bytes[2..4].try_into().unwrap());
+        let z = i16::from_le_bytes(accel_bytes[4..6].try_into().unwrap());
+
+        Ok(I16x3::new(x, y, z))
     }
 }
