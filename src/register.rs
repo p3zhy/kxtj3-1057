@@ -1,3 +1,5 @@
+use num_enum::TryFromPrimitive;
+
 /// Possible I²C slave addresses.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -71,13 +73,6 @@ impl Register {
     }
 }
 
-// === WHO_AMI_I (0Fh) ===
-/// `WHO_AM_I` device identification register
-pub const DEVICE_ID: u8 = 0x35;
-
-// === CTRL_REG1 (20h) ===
-pub const PC1_EN: u8 = 0b1000_0000;
-pub const RES_EN: u8 = 0b0100_0000;
 /// Operating mode.
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
@@ -91,3 +86,67 @@ pub enum Mode {
     /// Stand-by mode
     Standby,
 }
+
+#[allow(non_camel_case_types)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
+#[repr(u8)]
+pub enum DataRate {
+    Hz_0_781 = 0b1000,
+    Hz_1_563 = 0b1001,
+    Hz_3_125 = 0b1010,
+    Hz_6_25 = 0b1011,
+    Hz_12_5 = 0b0000,
+    Hz_25 = 0b0001,
+    Hz_50 = 0b0010,
+    Hz_100 = 0b0011,
+    Hz_200 = 0b0100,
+    Hz_400HZ = 0b0101,
+    Hz_800HZ = 0b0110,
+    Hz_1600HZ = 0b0111,
+}
+
+impl DataRate {
+    pub const fn bits(self) -> u8 {
+        self as u8
+    }
+}
+
+#[allow(non_camel_case_types)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
+#[repr(u8)]
+pub enum Range {
+    /// ±16g
+    G16 = 0b001,
+
+    /// ±16g available only in 14-bit mode
+    G16_14Bit = 0b111,
+
+    /// ±8g
+    G8 = 0b100,
+
+    /// ±8g available only in 14-bit mode
+    G8_14Bit = 0b110,
+
+    /// ±4g
+    G4 = 0b010,
+
+    /// ±2g (Default)
+    G2 = 0b000,
+}
+impl Range {
+    pub const fn bits(self) -> u8 {
+        self as u8
+    }
+}
+
+// === WHO_AMI_I (0Fh) ===
+///`WHO_AM_I` device identification register
+pub const DEVICE_ID: u8 = 0x35;
+
+// === CTRL_REG1 (1Bh) ===
+pub const PC1_EN: u8 = 0b1000_0000;
+pub const RES_EN: u8 = 0b0100_0000;
+pub const GSEL_MASK: u8 = 0b0001_1100;
+
+// === DATA_CTRL_REG (21h) ===
+pub const ODR_MASK: u8 = 0b0000_1111;
