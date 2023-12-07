@@ -12,9 +12,8 @@
 
 pub use accelerometer;
 use accelerometer::error::Error as AccelerometerError;
-use accelerometer::vector::I16x3;
-use accelerometer::RawAccelerometer;
-// use accelerometer::{Accelerometer, RawAccelerometer};
+use accelerometer::vector::{F32x3, I16x3};
+use accelerometer::{Accelerometer, RawAccelerometer};
 use embedded_hal::blocking::i2c::{self, WriteRead};
 
 mod register;
@@ -235,10 +234,10 @@ where
     }
 }
 
-
 impl<I2C, E> RawAccelerometer<I16x3> for Kxtj3<I2C>
 where
-    I2C: WriteRead<Error = E> + i2c::Write<Error = E>, E: core::fmt::Debug
+    I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
+    E: core::fmt::Debug,
 {
     type Error = Error<E, core::convert::Infallible>;
 
@@ -250,5 +249,62 @@ where
         let z = i16::from_le_bytes(accel_bytes[4..6].try_into().unwrap());
 
         Ok(I16x3::new(x, y, z))
+    }
+}
+
+impl<I2C, E> Accelerometer for Kxtj3<I2C>
+where
+    I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
+    E: core::fmt::Debug,
+{
+    type Error = Error<E, core::convert::Infallible>;
+
+    /// Get normalized ±g reading from the accelerometer.
+    fn accel_norm(&mut self) -> Result<F32x3, AccelerometerError<Self::Error>> {
+        let mode = self.get_mode()?;
+        let range = self.get_range()?;
+
+        // See "Mechanical Specifications" in the datasheet to find the values below.
+
+        // Depending on which Mode we are operating in, the data has different
+        // resolution. Using this knowledge, we determine how many bits the
+        // data needs to be shifted. This is necessary because the raw data
+        // is in left-justified two's complement and we would like for it to be
+        // right-justified instead.
+
+        let (scale, shift) = match (mode, range) {
+            // High Resolution mode - 14-bit data output
+            (Mode::HighResolution, Range::G8_14Bit) => (0.001, 2),
+            (Mode::HighResolution, Range::G16_14Bit) => (0.002, 2),
+            // High Resolution mode-12 bit data output
+            (Mode::HighResolution, Range::G2) => (0.001, 4),
+            (Mode::HighResolution, Range::G4) => (0.002, 4),
+            (Mode::HighResolution, Range::G8) => (0.004, 4),
+            (Mode::HighResolution, Range::G16_1)
+            | (Mode::HighResolution, Range::G16_2)
+            | (Mode::HighResolution, Range::G16_3) => (0.008, 4),
+
+            // Low power mode
+            (Mode::LowPower, Range::G2) => (0.015, 8),
+            (Mode::LowPower, Range::G4) => (0.031, 8),
+            (Mode::LowPower, Range::G8) => (0.062, 8),
+            (Mode::LowPower, Range::G16_1)
+            | (Mode::LowPower, Range::G16_2)
+            | (Mode::LowPower, Range::G16_3) => (0.125, 8),
+
+            _ => (0.0, 0),
+        };
+
+        let acc_raw = self.accel_raw()?;
+        let x = (acc_raw.x >> shift) as f32 * scale;
+        let y = (acc_raw.y >> shift) as f32 * scale;
+        let z = (acc_raw.z >> shift) as f32 * scale;
+
+        Ok(F32x3::new(x, y, z))
+    }
+
+    /// Get the sample rate of the accelerometer data.
+    fn sample_rate(&mut self) -> Result<f32, AccelerometerError<Self::Error>> {
+        Ok(self.get_datarate()?.sample_rate())
     }
 }

@@ -109,6 +109,22 @@ impl DataRate {
     pub const fn bits(self) -> u8 {
         self as u8
     }
+    pub const fn sample_rate(self) -> f32 {
+        match self {
+            DataRate::Hz_0_781 => 0.781,
+            DataRate::Hz_1_563 => 1.563,
+            DataRate::Hz_3_125 => 3.125,
+            DataRate::Hz_6_25 => 6.25,
+            DataRate::Hz_12_5 => 12.5,
+            DataRate::Hz_25 => 25.0,
+            DataRate::Hz_50 => 50.0,
+            DataRate::Hz_100 => 100.0,
+            DataRate::Hz_200 => 200.0,
+            DataRate::Hz_400HZ => 400.0,
+            DataRate::Hz_800HZ => 800.0,
+            DataRate::Hz_1600HZ => 1600.0,
+        }
+    }
 }
 
 #[allow(non_camel_case_types)]
