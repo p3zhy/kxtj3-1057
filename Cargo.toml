@@ -13,3 +13,7 @@ edition = "2021"
 accelerometer = "~0.12"
 embedded-hal = "~0.2"
 num_enum = { version = "~0.5", default-features = false }
+
+[dev-dependencies]
+esp-idf-sys = "0.31.11"
+esp-idf-hal = "0.39.3"
