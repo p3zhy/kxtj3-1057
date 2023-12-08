@@ -19,7 +19,7 @@ use embedded_hal::blocking::i2c::{self, WriteRead};
 mod register;
 
 use register::*;
-pub use register::{Mode, Register, SlaveAddr, DEVICE_ID};
+pub use register::{DataRate, Mode, Range, Register, SlaveAddr};
 
 /// Accelerometer errors, generic around another error type `E` representing
 /// an (optional) cause of this error.
