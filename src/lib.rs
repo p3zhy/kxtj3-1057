@@ -55,7 +55,26 @@ impl<I2C, E> Kxtj3<I2C>
 where
     I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
 {
-    /// TODO:Example
+    
+    /// Create a new KXTJ3-1057 driver from the given I2C peripheral.
+    /// Default is Hz_400 LowPower.
+    /// An example using the [esp_idf_hal](https://esp-rs.github.io/esp-idf-hal/esp_idf_hal):
+    ///     
+    ///     use esp_idf_hal::i2c::*;
+    ///     use esp_idf_hal::peripherals::Peripherals;
+    ///     use esp_idf_hal::prelude::*;
+    ///     use kxtj3_1057::Kxtj3;
+    ///           
+    ///     let peripherals = Peripherals::take().unwrap();
+    ///     let i2c = peripherals.i2c0;
+    ///     
+    ///     let sda = peripherals.pins.gpio10;
+    ///     let scl = peripherals.pins.gpio8;
+    ///     let config = I2cConfig::new().baudrate(400.kHz().into()).scl_enable_pullup(true).sda_enable_pullup(true);
+    /// 
+    ///     let i2c = I2cDriver::new(i2c, sda, scl, &config).unwrap();     
+    ///     let kxtj3 = Kxtj3::new(i2c, kxtj3_1057::SlaveAddr::Default).unwrap();     
+
     pub fn new(i2c: I2C, address: SlaveAddr) -> Result<Self, Error<E, core::convert::Infallible>> {
         let mut kxtj3 = Kxtj3 {
             i2c,

@@ -13,7 +13,10 @@ fn main() {
     let sda = peripherals.pins.gpio10;
     let scl = peripherals.pins.gpio8;
 
-    let config = I2cConfig::new().baudrate(400.kHz().into());
+    let config = I2cConfig::new()
+        .baudrate(400.kHz().into())
+        .scl_enable_pullup(true)
+        .sda_enable_pullup(true);
     let i2c = I2cDriver::new(i2c, sda, scl, &config).unwrap();
 
     let mut kxtj3 = Kxtj3::new(i2c, SlaveAddr::Default).unwrap();
