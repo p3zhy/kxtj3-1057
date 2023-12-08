@@ -11,6 +11,10 @@ Platform-agnostic Rust driver for the KXTJ3-1057,3-axis MEMS accelerometer.
 - [KXTJ3-1057 product page][product-page]
 - [KXTJ3-1057 datasheet][datasheet]
 
+### Examples
+
+- [ESP32X](https://github.com/p3zhy/kxtj3-1057/blob/main/examples/esp32x.rs)
+
 ## License
 
 Dual licensed under your choice of either of:
