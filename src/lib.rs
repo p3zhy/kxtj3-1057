@@ -55,7 +55,6 @@ impl<I2C, E> Kxtj3<I2C>
 where
     I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
 {
-    
     /// Create a new KXTJ3-1057 driver from the given I2C peripheral.
     /// Default is Hz_400 LowPower.
     /// An example using the [esp_idf_hal](https://esp-rs.github.io/esp-idf-hal/esp_idf_hal):
@@ -71,21 +70,41 @@ where
     ///     let sda = peripherals.pins.gpio10;
     ///     let scl = peripherals.pins.gpio8;
     ///     let config = I2cConfig::new().baudrate(400.kHz().into()).scl_enable_pullup(true).sda_enable_pullup(true);
-    /// 
+    ///
     ///     let i2c = I2cDriver::new(i2c, sda, scl, &config).unwrap();     
     ///     let kxtj3 = Kxtj3::new(i2c, kxtj3_1057::SlaveAddr::Default).unwrap();     
 
     pub fn new(i2c: I2C, address: SlaveAddr) -> Result<Self, Error<E, core::convert::Infallible>> {
+        Self::new_with_config(i2c, address, Configuration::default())
+    }
+
+    pub fn new_with_config(
+        i2c: I2C,
+        address: SlaveAddr,
+        config: Configuration,
+    ) -> Result<Self, Error<E, core::convert::Infallible>> {
         let mut kxtj3 = Kxtj3 {
             i2c,
             address: address.addr(),
         };
-
-        if kxtj3.get_device_id()? != DEVICE_ID {
-            return Err(Error::WrongAddress);
-        }
+        kxtj3.configure(config)?;
 
         Ok(kxtj3)
+    }
+
+    /// Configure the device
+    pub fn configure(
+        &mut self,
+        conf: Configuration,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        if self.get_device_id()? != DEVICE_ID {
+            return Err(Error::WrongAddress);
+        }
+        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
+        self.set_mode(conf.mode)?;
+        self.set_range(conf.range)?;
+        self.set_datarate(conf.datarate)?;
+        self.register_set_bits(Register::CTRL1, PC1_EN)
     }
 
     /// Write a byte to the given register.
@@ -123,16 +142,13 @@ where
     /// Controls the operating mode of the KXTJ3 .
     /// `CTRL_REG1`: `PC1` bit , CTRL_REG1`: `RES` bit.
     pub fn set_mode(&mut self, mode: Mode) -> Result<(), Error<E, core::convert::Infallible>> {
-        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
         match mode {
             Mode::LowPower => {
                 self.register_clear_bits(Register::CTRL1, RES_EN)?;
-                self.register_set_bits(Register::CTRL1, PC1_EN)?;
             }
             Mode::Standby => {}
             Mode::HighResolution => {
                 self.register_set_bits(Register::CTRL1, RES_EN)?;
-                self.register_set_bits(Register::CTRL1, PC1_EN)?;
             }
         }
 
@@ -160,7 +176,6 @@ where
         &mut self,
         datarate: DataRate,
     ) -> Result<(), Error<E, core::convert::Infallible>> {
-        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
         self.modify_register(Register::DATA_CTRL, |mut data_ctrl| {
             // Mask off highest 4 bits
             data_ctrl &= !ODR_MASK;
@@ -168,8 +183,7 @@ where
             data_ctrl |= datarate.bits();
 
             data_ctrl
-        })?;
-        self.register_set_bits(Register::CTRL1, PC1_EN)
+        })
     }
 
     /// Read the current data selection rate.
@@ -182,14 +196,12 @@ where
 
     /// Set the acceleration Range
     pub fn set_range(&mut self, range: Range) -> Result<(), Error<E, core::convert::Infallible>> {
-        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
         self.modify_register(Register::CTRL1, |mut ctrl1| {
             ctrl1 &= !GSEL_MASK;
             ctrl1 |= range.bits() << 2;
 
             ctrl1
-        })?;
-        self.register_set_bits(Register::CTRL1, PC1_EN)
+        })
     }
 
     /// Read the acceleration Range
@@ -325,5 +337,26 @@ where
     /// Get the sample rate of the accelerometer data.
     fn sample_rate(&mut self) -> Result<f32, AccelerometerError<Self::Error>> {
         Ok(self.get_datarate()?.sample_rate())
+    }
+}
+
+/// Sensor configuration options
+#[derive(Debug, Clone, Copy)]
+pub struct Configuration {
+    /// The operating mode, default [`Mode::HighResolution`].
+    pub mode: Mode,
+    /// The output data rate, default [`DataRate::Hz_6_25`].
+    pub datarate: DataRate,
+    /// The output acceleration range , default [`Range::G2`].
+    pub range: Range,
+}
+
+impl Default for Configuration {
+    fn default() -> Self {
+        Self {
+            mode: Mode::HighResolution,
+            datarate: DataRate::Hz_6_25,
+            range: Range::G2,
+        }
     }
 }
