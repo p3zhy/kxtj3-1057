@@ -32,8 +32,11 @@ pub enum Error<BusError, PinError> {
     /// Invalid data rate selection
     InvalidDataRate,
 
-    /// Invalid selects the acceleration range
+    /// Invalid acceleration range selection
     InvalidRange,
+
+    /// Invalid operating mode selection
+    InvalidMode,
 
     /// Attempted to write to a read-only register
     WriteToReadOnly,
@@ -146,9 +149,11 @@ where
             Mode::LowPower => {
                 self.register_clear_bits(Register::CTRL1, RES_EN)?;
             }
-            Mode::Standby => {}
             Mode::HighResolution => {
                 self.register_set_bits(Register::CTRL1, RES_EN)?;
+            }
+            _ => {
+                return Err(Error::InvalidMode);
             }
         }
 
