@@ -20,8 +20,7 @@ fn main() {
     let i2c = I2cDriver::new(i2c, sda, scl, &config).unwrap();
 
     let mut kxtj3 = Kxtj3::new(i2c, SlaveAddr::Default).unwrap();
-    kxtj3.set_range(Range::G2).unwrap();
-    kxtj3.set_mode(Mode::LowPower).unwrap();
+
     let mut tracker = Tracker::new(3700.0);
     loop {
         let accel = kxtj3.accel_raw().unwrap();
