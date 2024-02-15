@@ -1,3 +1,5 @@
+//! This module provides definitions for controlling the accelerometer sensor.
+
 use num_enum::TryFromPrimitive;
 
 /// Possible I²C slave addresses.
@@ -73,7 +75,7 @@ impl Register {
     }
 }
 
-/// Operating mode.
+///The operating mode .
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 #[repr(u8)]
 pub enum Mode {
@@ -87,6 +89,7 @@ pub enum Mode {
     Standby,
 }
 
+/// The acceleration output data rate.
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
@@ -126,7 +129,7 @@ impl DataRate {
         }
     }
 }
-
+///The acceleration range.
 #[allow(non_camel_case_types)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
 #[repr(u8)]
@@ -161,14 +164,112 @@ impl Range {
     }
 }
 
+/// The output data rate for the wake-up function.
+#[allow(dead_code, non_camel_case_types)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
+#[repr(u8)]
+pub enum MotionDetectionDataRate {
+    Hz_0_781 = 0b000,
+    Hz_1_563 = 0b001,
+    Hz_3_125 = 0b010,
+    Hz_6_25 = 0b011,
+    Hz_12_5 = 0b100,
+    Hz_25 = 0b101,
+    Hz_50 = 0b110,
+    Hz_100 = 0b111,
+}
+impl MotionDetectionDataRate {
+    pub const fn bits(self) -> u8 {
+        self as u8
+    }
+    pub const fn sample_rate(self) -> f32 {
+        match self {
+            MotionDetectionDataRate::Hz_0_781 => 0.781,
+            MotionDetectionDataRate::Hz_1_563 => 1.563,
+            MotionDetectionDataRate::Hz_100 => 100.0,
+            MotionDetectionDataRate::Hz_50 => 50.0,
+            MotionDetectionDataRate::Hz_25 => 25.0,
+            MotionDetectionDataRate::Hz_12_5 => 12.5,
+            MotionDetectionDataRate::Hz_3_125 => 3.125,
+            MotionDetectionDataRate::Hz_6_25 => 6.25,
+        }
+    }
+}
+
+///The axis and direction of motion.
+#[allow(dead_code, non_camel_case_types)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
+#[repr(u8)]
+pub enum MotionDetectionAxis {
+    X_Negative = 0b0010_0000,
+    X_Positive = 0b0001_0000,
+    Y_Negative = 0b0000_1000,
+    Y_Positive = 0b0000_0100,
+    Z_Negative = 0b0000_0010,
+    Z_Positive = 0b0000_0001,
+    None = 0b0000_0000,
+}
+impl MotionDetectionAxis {
+    pub const fn bits(self) -> u8 {
+        self as u8
+    }
+}
+
+///The latch mode of motion interrupt.
+#[allow(dead_code, non_camel_case_types)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
+#[repr(u8)]
+pub enum MotionDetectionLatchMode {
+    Latched = 0,
+    UnLatched = 1,
+}
+impl MotionDetectionLatchMode {
+    pub const fn bits(self) -> u8 {
+        self as u8
+    }
+}
+///The polarity of the physical interrupt pin.
+#[allow(dead_code, non_camel_case_types)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
+#[repr(u8)]
+pub enum InterruptPinPolarity {
+    ActiveLow,
+    ActiveHigh,
+}
+
+///The response of the physical interrupt pin.
+#[allow(dead_code, non_camel_case_types)]
+#[derive(Copy, Clone, Debug, Eq, PartialEq, TryFromPrimitive)]
+#[repr(u8)]
+pub enum InterruptPinResponse {
+    /// The physical interrupt pin (INT) latches until it is cleared by reading INT_REL
+    Latched,
+    /// The physical interrupt pin (INT) will transmit one pulse with a period of 0.03 - 0.05ms
+    Pulsed,
+}
+
 // === WHO_AMI_I (0Fh) ===
 ///`WHO_AM_I` device identification register
-pub const DEVICE_ID: u8 = 0x35;
+pub(crate) const DEVICE_ID: u8 = 0x35;
 
 // === CTRL_REG1 (1Bh) ===
-pub const PC1_EN: u8 = 0b1000_0000;
-pub const RES_EN: u8 = 0b0100_0000;
-pub const GSEL_MASK: u8 = 0b0001_1100;
+pub(crate) const PC1_EN: u8 = 0b1000_0000;
+pub(crate) const WUFE_EN: u8 = 0b0000_0010;
+pub(crate) const DRDYE_EN: u8 = 0b0010_0000;
+pub(crate) const RES_EN: u8 = 0b0100_0000;
+pub(crate) const GSEL_MASK: u8 = 0b0001_1100;
+
+// === CTRL_REG2 (1Dh) ===
+pub(crate) const ODRW_MASK: u8 = 0b0000_0111;
 
 // === DATA_CTRL_REG (21h) ===
-pub const ODR_MASK: u8 = 0b0000_1111;
+pub(crate) const ODR_MASK: u8 = 0b0000_1111;
+
+// === INT_CTRL_REG1(1Eh)  ====
+pub(crate) const IEN_EN: u8 = 0b0010_0000;
+pub(crate) const IEA_EN: u8 = 0b0001_0000;
+pub(crate) const IEL_EN: u8 = 0b0000_1000;
+
+// === INT_CTRL_REG2(1Fh)  ====
+pub(crate) const ULMODE_EN: u8 = 0b1000_0000;
+pub(crate) const WUE_MASK: u8 = 0b0011_1111;

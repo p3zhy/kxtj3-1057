@@ -14,12 +14,13 @@ pub use accelerometer;
 use accelerometer::error::Error as AccelerometerError;
 use accelerometer::vector::{F32x3, I16x3};
 use accelerometer::{Accelerometer, RawAccelerometer};
-use embedded_hal::blocking::i2c::{self, WriteRead};
+use embedded_hal::i2c::I2c;
 
-mod register;
-
+pub mod config;
+pub mod register;
+use config::*;
 use register::*;
-pub use register::{DataRate, Mode, Range, Register, SlaveAddr};
+use register::{DataRate, Mode, Range, Register, SlaveAddr};
 
 /// Accelerometer errors, generic around another error type `E` representing
 /// an (optional) cause of this error.
@@ -28,6 +29,9 @@ pub enum Error<BusError, PinError> {
     /// I²C bus error
     Bus(BusError),
     Pin(PinError),
+
+    /// Invalid Axis and direction
+    InvalidAxis,
 
     /// Invalid data rate selection
     InvalidDataRate,
@@ -54,9 +58,13 @@ pub struct Kxtj3<I2C> {
     address: u8,
 }
 
+// impl<I2C, E> Kxtj3<I2C>
+// where
+//     I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
+
 impl<I2C, E> Kxtj3<I2C>
 where
-    I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
+    I2C: I2c<Error = E>,
 {
     /// Create a new KXTJ3-1057 driver from the given I2C peripheral.
     /// Default is Hz_400 LowPower.
@@ -95,7 +103,7 @@ where
         Ok(kxtj3)
     }
 
-    /// Configure the device
+    /// Configures the device
     pub fn configure(
         &mut self,
         conf: Configuration,
@@ -103,14 +111,37 @@ where
         if self.get_device_id()? != DEVICE_ID {
             return Err(Error::WrongAddress);
         }
-        self.register_clear_bits(Register::CTRL1, PC1_EN)?;
+        self.enable_standby_mode()?;
         self.set_mode(conf.mode)?;
         self.set_range(conf.range)?;
         self.set_datarate(conf.datarate)?;
-        self.register_set_bits(Register::CTRL1, PC1_EN)
+
+        if conf.enable_new_acceleration_interrupt {
+            self.enable_new_accelration_interrupt()?;
+        }
+        if let Some(md_conf) = conf.motion_detection {
+            self.set_motion_detection_datarate(md_conf.datarate)?;
+            self.set_motion_detection_latch_mode(md_conf.latch_mode)?;
+            self.set_motion_detection_na_counter(md_conf.non_activity_counter)?;
+            self.set_motion_detection_wakeup_counter(md_conf.wakeup_counter)?;
+            self.set_motion_detection_threshold(md_conf.wakeup_threshold)?;
+            self.enable_motion_detection_axes(
+                md_conf.enable_x_negative,
+                md_conf.enable_x_positive,
+                md_conf.enable_y_negative,
+                md_conf.enable_y_positive,
+                md_conf.enable_z_negative,
+                md_conf.enable_z_positive,
+            )?;
+            if let Some(ip_conf) = md_conf.interrupt_pin {
+                self.set_motion_detection_interrupt_pin_polarity(ip_conf.polarity)?;
+                self.set_motion_detection_interrupt_pin_response(ip_conf.response)?;
+            }
+        }
+        self.disable_standby_mode()
     }
 
-    /// Write a byte to the given register.
+    /// Writes a byte to the given register.
     fn write_register(
         &mut self,
         register: Register,
@@ -125,7 +156,7 @@ where
             .map_err(Error::Bus)
     }
 
-    /// Read a byte from the given register.
+    /// Reads a byte from the given register.
     fn read_register(
         &mut self,
         register: Register,
@@ -142,8 +173,21 @@ where
         self.read_register(Register::WHOAMI)
     }
 
+    /// Enable stand-by mode .
+    /// `CTRL_REG1`: `PC1` bit.
+    pub fn enable_standby_mode(&mut self) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.register_clear_bits(Register::CTRL1, PC1_EN)
+    }
+
+    /// Disable stand-by mode .
+    /// `CTRL_REG1`: `PC1` bit.
+    pub fn disable_standby_mode(&mut self) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.register_set_bits(Register::CTRL1, PC1_EN)
+    }
+
     /// Controls the operating mode of the KXTJ3 .
-    /// `CTRL_REG1`: `PC1` bit , CTRL_REG1`: `RES` bit.
+    /// `CTRL_REG1`: `RES` bit.
+    /// Before using this function, the device must be in standby mode.
     pub fn set_mode(&mut self, mode: Mode) -> Result<(), Error<E, core::convert::Infallible>> {
         match mode {
             Mode::LowPower => {
@@ -160,7 +204,7 @@ where
         Ok(())
     }
 
-    /// Read the current operating mode.
+    /// Reads the current operating mode.
     pub fn get_mode(&mut self) -> Result<Mode, Error<E, core::convert::Infallible>> {
         let ctrl1 = self.read_register(Register::CTRL1)?;
 
@@ -177,6 +221,8 @@ where
     }
 
     /// Data rate selection.
+    ///
+    /// Before using this function, the device must be in standby mode.
     pub fn set_datarate(
         &mut self,
         datarate: DataRate,
@@ -191,7 +237,7 @@ where
         })
     }
 
-    /// Read the current data selection rate.
+    /// Reads the current data selection rate.
     pub fn get_datarate(&mut self) -> Result<DataRate, Error<E, core::convert::Infallible>> {
         let data_ctrl = self.read_register(Register::DATA_CTRL)?;
         let odr = data_ctrl & 0x0F;
@@ -199,17 +245,18 @@ where
         DataRate::try_from(odr).map_err(|_| Error::InvalidDataRate)
     }
 
-    /// Set the acceleration Range
+    /// Sets the acceleration Range.
+    ///
+    /// Before using this function, the device must be in standby mode.
     pub fn set_range(&mut self, range: Range) -> Result<(), Error<E, core::convert::Infallible>> {
         self.modify_register(Register::CTRL1, |mut ctrl1| {
             ctrl1 &= !GSEL_MASK;
             ctrl1 |= range.bits() << 2;
-
             ctrl1
         })
     }
 
-    /// Read the acceleration Range
+    /// Reads the acceleration Range
     pub fn get_range(&mut self) -> Result<Range, Error<E, core::convert::Infallible>> {
         let ctrl1 = self.read_register(Register::CTRL1)?;
         let gsel = (ctrl1 >> 2) & 0x07;
@@ -217,7 +264,7 @@ where
         Range::try_from(gsel).map_err(|_| Error::InvalidRange)
     }
 
-    /// Read from the registers for each of the 3 axes.
+    /// Reads from the registers for each of the 3 axes.
     fn read_accel_bytes(&mut self) -> Result<[u8; 6], Error<E, core::convert::Infallible>> {
         let mut data = [0u8; 6];
 
@@ -225,6 +272,215 @@ where
             .write_read(self.address, &[Register::XOUT_L.addr() | 0x80], &mut data)
             .map_err(Error::Bus)
             .and(Ok(data))
+    }
+
+    /// Enables the reporting of the availability of new acceleration data as an interrupt.
+    ///
+    /// Before using this function, the device must be in standby mode.
+    pub fn enable_new_accelration_interrupt(
+        &mut self,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.register_set_bits(Register::CTRL1, DRDYE_EN)
+    }
+
+    /// Enables the Wake-Up (motion detect) function.
+    ///
+    /// Before using this function, the device must be in standby mode.
+    pub fn enable_motion_detection(&mut self) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.register_set_bits(Register::CTRL1, WUFE_EN)
+    }
+
+    /// Enables the physical interrupt pin (INT).
+    ///
+    /// Before using this function, the device must be in standby mode.
+    pub fn enable_motion_detection_physical_interrupt_pin(
+        &mut self,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.register_set_bits(Register::INT_CTRL1, IEN_EN)
+    }
+
+    /// Sets the polarity of the physical interrupt pin
+    ///
+    /// Before using this function, the device must be in standby mode.
+    pub fn set_motion_detection_interrupt_pin_polarity(
+        &mut self,
+        polarity: InterruptPinPolarity,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        match polarity {
+            InterruptPinPolarity::ActiveHigh => self.register_set_bits(Register::INT_CTRL1, IEA_EN),
+            InterruptPinPolarity::ActiveLow => {
+                self.register_clear_bits(Register::INT_CTRL1, IEA_EN)
+            }
+        }
+    }
+
+    /// Sets the response of the physical interrupt pin.
+    ///
+    /// Before using this function, the device must be in standby mode.
+    pub fn set_motion_detection_interrupt_pin_response(
+        &mut self,
+        response: InterruptPinResponse,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        match response {
+            InterruptPinResponse::Latched => self.register_clear_bits(Register::INT_CTRL1, IEL_EN),
+            InterruptPinResponse::Pulsed => self.register_set_bits(Register::INT_CTRL1, IEL_EN),
+        }
+    }
+
+    /// Sets the Output Data Rate for the motion detection function
+    ///
+    /// Before using this function, the device must be in standby mode.
+    pub fn set_motion_detection_datarate(
+        &mut self,
+        datarate: MotionDetectionDataRate,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.modify_register(Register::CTRL2, |mut ctrl2| {
+            ctrl2 &= !ODRW_MASK;
+            ctrl2 |= datarate.bits();
+            ctrl2
+        })
+    }
+
+    /// Reads the current data selection rate the motion detection function.
+    pub fn get_motion_detection_datarate(
+        &mut self,
+    ) -> Result<MotionDetectionDataRate, Error<E, core::convert::Infallible>> {
+        let data_ctrl = self.read_register(Register::CTRL2)?;
+        let odr = data_ctrl & 0x07;
+        MotionDetectionDataRate::try_from(odr).map_err(|_| Error::InvalidDataRate)
+    }
+
+    /// Sets the motion detection latch mode.
+    ///
+    /// Before using this function, the device must be in standby mode.
+    pub fn set_motion_detection_latch_mode(
+        &mut self,
+        latch_mode: MotionDetectionLatchMode,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.modify_register(Register::INT_CTRL2, |mut int_ctrl2| {
+            int_ctrl2 &= !ULMODE_EN;
+            int_ctrl2 |= latch_mode.bits() << 7;
+            int_ctrl2
+        })
+    }
+
+    /// Sets the time motion must be present before a wake-up interrupt is set.
+    ///
+    /// `WAKEUP_COUNTER (counts) = Wake-Up Delay Time (sec) x Wake-Up Function ODR (Hz)`
+    ///
+    /// Before using this function, the device must be in standby mode.
+    pub fn set_motion_detection_wakeup_counter(
+        &mut self,
+        wakeup_counter: u8,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.write_register(Register::WAKEUP_COUNTER, wakeup_counter)
+    }
+
+    /// Sets the non-activity time required before another wake-up interrupt can be set.
+    ///
+    /// `NA_COUNTER (counts) = Non-Activity Time (sec) x Wake-Up Function ODR (Hz)`
+    ///
+    /// Before using this function, the device must be in standby mode.
+    pub fn set_motion_detection_na_counter(
+        &mut self,
+        na_counter: u8,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.write_register(Register::NA_COUNTER, na_counter)
+    }
+
+    /// Sets the threshold for motion detection interrupt is set.
+    ///
+    /// `WAKEUP_THRESHOLD (counts) = Desired Threshold (g) x 256 (counts/g)`
+    ///
+    /// Before using this function, the device must be in standby mode.
+    pub fn set_motion_detection_threshold(
+        &mut self,
+        desired_threshold: u8,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        let upper_8_bits = (desired_threshold >> 4) as u8;
+        let lower_8_bits = (desired_threshold << 4) as u8;
+        self.write_register(Register::WAKEUP_THRESHOLD_H, upper_8_bits)?;
+        self.write_register(Register::WAKEUP_THRESHOLD_L, lower_8_bits)
+    }
+
+    /// Reports the axis and direction of detected motion.
+    pub fn get_motion_detection_axis(
+        &mut self,
+    ) -> Result<MotionDetectionAxis, Error<E, core::convert::Infallible>> {
+        let int_src2 = self.read_register(Register::INT_SOURCE2)?;
+        MotionDetectionAxis::try_from(int_src2).map_err(|_| Error::InvalidAxis)
+    }
+    ///Indicates Wake-up has occurred or not.
+    pub fn is_motion_detected(&mut self) -> Result<bool, Error<E, core::convert::Infallible>> {
+        let int_src1 = self.read_register(Register::INT_SOURCE1)?;
+        let wufs = (int_src1 >> 1) & 0x01 != 0;
+        Ok(wufs)
+    }
+
+    /// Indicates that new acceleration data (0x06 to 0x0B) is available or not .
+    pub fn is_acceleration_data_ready(
+        &mut self,
+    ) -> Result<bool, Error<E, core::convert::Infallible>> {
+        let int_src1 = self.read_register(Register::INT_SOURCE1)?;
+        let drdy = (int_src1 >> 4) & 0x01 != 0;
+        Ok(drdy)
+    }
+
+    /// Sets which axes and directions of detected motion can cause an interrupt.
+    ///
+    /// Before using this function, the device must be in standby mode.
+    pub fn enable_motion_detection_axes(
+        &mut self,
+        x_negative: bool,
+        x_positive: bool,
+        y_negative: bool,
+        y_positive: bool,
+        z_negative: bool,
+        z_positive: bool,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.modify_register(Register::INT_CTRL2, |mut int_ctrl2| {
+            int_ctrl2 &= !WUE_MASK;
+            int_ctrl2 |= if x_negative {
+                MotionDetectionAxis::X_Negative.bits()
+            } else {
+                0
+            };
+            int_ctrl2 |= if x_positive {
+                MotionDetectionAxis::X_Positive.bits()
+            } else {
+                0
+            };
+            int_ctrl2 |= if y_negative {
+                MotionDetectionAxis::Y_Negative.bits()
+            } else {
+                0
+            };
+            int_ctrl2 |= if y_positive {
+                MotionDetectionAxis::Y_Positive.bits()
+            } else {
+                0
+            };
+            int_ctrl2 |= if z_negative {
+                MotionDetectionAxis::Z_Negative.bits()
+            } else {
+                0
+            };
+            int_ctrl2 |= if z_positive {
+                MotionDetectionAxis::Z_Positive.bits()
+            } else {
+                0
+            };
+            int_ctrl2
+        })
+    }
+
+    /// Clears Latched interrupt source information (INT_SOURCE1 and INT_SOURCE2).
+    /// Changes physical interrupt latched pin (INT) to inactive state.
+    pub fn clear_motion_detection_lathced_info(
+        &mut self,
+    ) -> Result<(), Error<E, core::convert::Infallible>> {
+        self.read_register(Register::INT_REL)?;
+        Ok(())
     }
 
     /// Modify a register's value. Read the current value of the register,
@@ -272,7 +528,7 @@ where
 
 impl<I2C, E> RawAccelerometer<I16x3> for Kxtj3<I2C>
 where
-    I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
+    I2C: I2c<Error = E>,
     E: core::fmt::Debug,
 {
     type Error = Error<E, core::convert::Infallible>;
@@ -290,7 +546,7 @@ where
 
 impl<I2C, E> Accelerometer for Kxtj3<I2C>
 where
-    I2C: WriteRead<Error = E> + i2c::Write<Error = E>,
+    I2C: I2c<Error = E>,
     E: core::fmt::Debug,
 {
     type Error = Error<E, core::convert::Infallible>;
@@ -342,26 +598,5 @@ where
     /// Get the sample rate of the accelerometer data.
     fn sample_rate(&mut self) -> Result<f32, AccelerometerError<Self::Error>> {
         Ok(self.get_datarate()?.sample_rate())
-    }
-}
-
-/// Sensor configuration options
-#[derive(Debug, Clone, Copy)]
-pub struct Configuration {
-    /// The operating mode, default [`Mode::HighResolution`].
-    pub mode: Mode,
-    /// The output data rate, default [`DataRate::Hz_6_25`].
-    pub datarate: DataRate,
-    /// The output acceleration range , default [`Range::G2`].
-    pub range: Range,
-}
-
-impl Default for Configuration {
-    fn default() -> Self {
-        Self {
-            mode: Mode::HighResolution,
-            datarate: DataRate::Hz_6_25,
-            range: Range::G2,
-        }
     }
 }
