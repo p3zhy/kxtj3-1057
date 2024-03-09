@@ -9,8 +9,8 @@ fn main() {
 
     let peripherals = Peripherals::take().unwrap();
     let i2c = peripherals.i2c0;
-    let sda = peripherals.pins.gpio10;
-    let scl = peripherals.pins.gpio8;
+    let sda = peripherals.pins.gpio2;
+    let scl = peripherals.pins.gpio1;
 
     let config = I2cConfig::new()
         .baudrate(Hertz(400_000))
@@ -29,11 +29,14 @@ fn main() {
     let mut kxtj3 = Kxtj3::new_with_config(i2c, SlaveAddr::Default, device_config).unwrap();
 
     loop {
-        if kxtj3.is_motion_detected().unwrap() {
-            println!("{:?}", kxtj3.get_motion_detection_axis().unwrap());
-            let _ = kxtj3.clear_motion_detection_lathced_info();
+        if let Ok(is_motion_detected) = kxtj3.is_motion_detected() {
+            if is_motion_detected {
+                if let Ok(motion_detection_axis) = kxtj3.get_motion_detection_axis() {
+                    println!("{:?}", motion_detection_axis);
+                }
+                let _ = kxtj3.clear_motion_detection_lathced_info();
+            }
         }
-
         FreeRtos::delay_ms(500);
     }
 }

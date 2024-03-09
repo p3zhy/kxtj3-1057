@@ -112,6 +112,7 @@ where
             self.enable_new_accelration_interrupt()?;
         }
         if let Some(md_conf) = conf.motion_detection {
+            self.enable_motion_detection()?;
             self.set_motion_detection_datarate(md_conf.datarate)?;
             self.set_motion_detection_latch_mode(md_conf.latch_mode)?;
             self.set_motion_detection_na_counter(md_conf.non_activity_counter)?;
